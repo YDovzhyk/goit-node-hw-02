@@ -1,5 +1,6 @@
 const {Schema, model} = require('mongoose');
 const Joi = require("joi");
+
 const {handleSaveErrors} = require("../helpers");
 
 const genders = ['male', 'female'];
@@ -9,18 +10,15 @@ const contactSchema = new Schema({
     name: {
         type: String,
         required: [true, 'Set name for contact'],
-        unique: true,
     },
     email: {
         type: String,
         required: [true, 'Set email for contact'],
-        unique: true,
     }, 
     phone: {
         type: String,
         required: [true, 'Set phone for contact'],
         match: phoneRegexp,
-        unique: true,
     },
     favorite: {
         type: Boolean,
@@ -30,9 +28,14 @@ const contactSchema = new Schema({
         type: String,
         enum: genders,
     },
+    owner: {
+        type: Schema.Types.ObjectId,
+        ref: "user",
+        required: true,
+    }
 }, {versionKey: false, timestamps: true});
 
-contactSchema.post("save", handleSaveErrors); // Міняє статус помилки якщо не вірно внесені користувачем данні або якщо унікальні данні вже є
+contactSchema.post('save', handleSaveErrors); // Міняє статус помилки якщо не вірно внесені користувачем данні або якщо унікальні данні вже є
 
 const addSchema = Joi.object({
     name: Joi.string()

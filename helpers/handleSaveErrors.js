@@ -1,7 +1,11 @@
-const handleSaveErrors = (error, data, next)=> {
+const handleSaveErrors = (error, data, next) => {
     const {code, name} = error;
     error.status = (code === 11000 && name === "MongoServerError") ? 409 : 400;
-    next();
+    if(Object.keys(data).length === 0) {
+        return error.status;
+    } else {
+        next();
+    }
 }
 
 module.exports = handleSaveErrors;
