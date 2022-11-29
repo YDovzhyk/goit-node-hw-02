@@ -1,7 +1,14 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const gravatar = require("gravatar");
+const Jimp = require('jimp');
+
+const fs = require("fs/promises");
+const path = require("path");
+
 const {User} = require("../models/user");
 const {SECRET_KEY} = process.env;
+
 
 const {RequestError} = require("../helpers");
 
@@ -15,7 +22,9 @@ const registerController = async(req, res)=> {
 
     const hashPassword = await bcrypt.hash(password, 10)
 
-    const newUser = await User.create({username, email, password: hashPassword});
+    const avatarURL = gravatar.url(email) // добавляємо посилання на аватар gravatar та записуємо його у схему
+
+    const newUser = await User.create({username, email, password: hashPassword, avatarURL});
 
     res.status(201).json({
         "user": {
@@ -72,9 +81,31 @@ const logoutController = async(req, res) => {
     res.status(204).json({message: "logout success"});
 }
 
+const avatarsDir = path.join(__dirname, "../", "public", "avatars")
+
+const updateAvatar = async (req, res)=> {
+    const {_id} = req.user;
+    const {path: tempUpload, originalname} = req.file;
+    const filename = `${_id}_${originalname}`;
+    const resultUpload = path.join(avatarsDir, filename);
+    await fs.rename(tempUpload, resultUpload);
+
+    const resizeAvatar = await Jimp.read(resultUpload);
+    await resizeAvatar.resize(250, 250).write(resultUpload); // Обробляэмо аватарку пакетом jimp і ставимо для неї розміри 250 на 250
+
+    const avatarURL = path.join("avatars", filename);
+    await User.findByIdAndUpdate(req.user._id, {avatarURL});
+
+    res.json({
+        avatarURL
+    })
+
+}
+
 module.exports = {
     registerController,
     loginController,
     getCurrentController,
     logoutController,
+    updateAvatar,
 }
