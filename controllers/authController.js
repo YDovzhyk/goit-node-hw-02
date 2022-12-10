@@ -1,16 +1,16 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const gravatar = require("gravatar");
+const shortid = require("shortid");
 const Jimp = require('jimp');
 
 const fs = require("fs/promises");
 const path = require("path");
 
 const {User} = require("../models/user");
-const {SECRET_KEY} = process.env;
+const {SECRET_KEY, BASE_URL} = process.env;
 
-
-const {RequestError} = require("../helpers");
+const {RequestError, sendMail} = require("../helpers");
 
 const registerController = async(req, res)=> {
     const {username, email, password} = req.body;
@@ -24,13 +24,24 @@ const registerController = async(req, res)=> {
 
     const avatarURL = gravatar.url(email) // добавляємо посилання на аватар gravatar та записуємо його у схему
 
-    const newUser = await User.create({username, email, password: hashPassword, avatarURL});
+    const verificationToken = shortid.generate(); 
+
+    const newUser = await User.create({username, email, password: hashPassword, avatarURL, verificationToken});
+
+    const mail = {
+        to: email,
+        subject: "Site registration confirmation",
+        html: `<a target="_blank" href="${BASE_URL}/api/users/verify/${verificationToken}">Follow the link to confirm your registration</a>`
+    }
+
+    await sendMail(mail)
 
     res.status(201).json({
         "user": {
             "username": newUser.username,
             "email": newUser.email,
-            "subscription": newUser.subscription
+            "subscription": newUser.subscription,
+            "verificationToken": newUser.verificationToken,
         }
     })
 };
@@ -41,6 +52,10 @@ const loginController = async(req, res) => {
 
     if(!user) {
         throw RequestError(401, "Invalid email or password"); // throw RequestError(401, "Invalid email");
+    }
+
+    if(!user.verify) {
+        throw RequestError(401, "Email not verify"); // Якщо користувач ще не підтвердив свій mail
     }
 
     const passwordCompare = await bcrypt.compare(password, user.password);
@@ -99,7 +114,47 @@ const updateAvatar = async (req, res)=> {
     res.json({
         avatarURL
     })
+}
 
+const verifyController = async(req, res) => {
+    const {verificationToken} = req.params;
+    const user = await User.findOne({verificationToken})
+
+    if(!user) {
+        throw RequestError(404, "User not found")
+    }
+
+    await User.findByIdAndUpdate(user._id, {verify: true, verificationToken: ""})
+
+    res.json({
+        message: "Verification successful"
+    })
+}
+
+const resendEmailController = async(req, res) => {
+    const {email} = req.body;
+
+    const user = await User.findOne({email});
+
+    if(!user) {
+        throw RequestError(404, "User not found")
+    }
+
+    if(user.verify) {
+        throw RequestError(400, "Verification has already been passed")
+    }
+
+    const mail = {
+        to: email,
+        subject: "Site registration confirmation",
+        html: `<a target="_blank" href="${BASE_URL}/api/users/verify/${user.verificationToken}">Follow the link to confirm your registration</a>`
+    }
+
+    await sendMail(mail);
+
+    res.json({
+        message: "Verification email sent"
+    })
 }
 
 module.exports = {
@@ -108,4 +163,6 @@ module.exports = {
     getCurrentController,
     logoutController,
     updateAvatar,
+    verifyController,
+    resendEmailController,
 }
